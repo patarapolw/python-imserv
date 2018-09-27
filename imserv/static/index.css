@@ -1,0 +1,17 @@
+input {
+  font-size: 24px;
+  margin: 0 auto;
+  margin-top: 20px;
+}
+
+#tags-area, #input-bar {
+  width: 500px;
+}
+
+#tags-bar {
+  width: 100%;
+}
+
+img {
+  margin-top: 20px;
+}
