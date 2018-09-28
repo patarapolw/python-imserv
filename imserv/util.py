@@ -5,9 +5,11 @@ from PIL import Image, ImageChops
 from pathlib import Path
 import imagehash
 from send2trash import send2trash
-import os
+import hashlib
+from io import BytesIO
+import logging
 
-from .config import IMG_FOLDER_PATH
+from .config import IMG_FOLDER_PATH, config
 
 
 def open_browser_tab(url):
@@ -45,7 +47,7 @@ def remove_duplicate(file_path=IMG_FOLDER_PATH):
     hashes = set()
 
     for p in images_in_path(file_path):
-        h = imagehash.dhash(trim_image(shrink_image(Image.open(p))))
+        h = get_image_hash(Image.open(p), trim=True)
         if h in hashes:
             print('Deleting {}'.format(p))
             send2trash(p)
@@ -54,23 +56,58 @@ def remove_duplicate(file_path=IMG_FOLDER_PATH):
 
 
 def remove_non_images(file_path=IMG_FOLDER_PATH):
-    for file_path in images_in_path(file_path):
-        send2trash(str(file_path))
+    images = set(images_in_path(file_path))
+    for p in Path(file_path).glob('**/*.*'):
+        if not p.is_dir() and p not in images:
+            send2trash(str(p))
 
 
 def images_in_path(file_path=IMG_FOLDER_PATH):
     for p in Path(file_path).glob('**/*.*'):
-        if not p.is_dir() and p.suffix.lower() in {'.png', '.jpg', '.jp2', '.jpeg', '.gif'}:
+        if not p.is_dir() and not p.name.startswith('.') \
+                and p.suffix.lower() in {'.png', '.jpg', '.jp2', '.jpeg', '.gif'}:
             yield p
 
 
 def complete_path_split(path, relative_to=IMG_FOLDER_PATH):
     components = []
 
-    path = Path(path).relative_to(relative_to)
+    path = Path(path)
+    if relative_to:
+        path = path.relative_to(relative_to)
+
     while path.name:
         components.append(path.name)
 
         path = path.parent
 
     return components
+
+
+def get_image_hash(im, trim=True, **kwargs):
+    if isinstance(im, (str, Path)):
+        try:
+            im = Image.open(im)
+        except OSError:
+            return None
+
+    if trim:
+        im = trim_image(im)
+
+    return str(imagehash.whash(
+        im,
+        hash_size=config['hash_size'],
+        **kwargs
+    ))
+
+
+def get_checksum(fp):
+    if isinstance(fp, BytesIO):
+        checksum = hashlib.md5(fp.getvalue()).hexdigest()
+    elif isinstance(fp, (str, Path)):
+        checksum = hashlib.md5(Path(fp).read_bytes()).hexdigest()
+    else:
+        logging.error('Cannot generate checksum')
+        return None
+
+    return checksum

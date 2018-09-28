@@ -1,4 +1,7 @@
-from imserv import db, ImServ
+from imserv import ImServ
+
 
 if __name__ == '__main__':
-    db.Base.metadata.create_all(ImServ().engine)
+    ims = ImServ()
+    ims.init()
+    ims.import_images('/Volumes/PATARAPOLW/Exam', skip_hash=True)

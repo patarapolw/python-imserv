@@ -2,21 +2,22 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 from nonrepeat import nonrepeat_filename
-import PIL.Image
 import imagehash
 from uuid import uuid4
 from slugify import slugify
 import logging
-import os
+import PIL.Image
 from urllib.parse import quote
 from send2trash import send2trash
 import json
+import os
+import time
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime
-from citext import CIText
+from sqlalchemy import Column, Integer, String
 
-from .util import shrink_image, trim_image
+from .util import (complete_path_split, trim_image, shrink_image,
+                   get_image_hash, get_checksum)
 from .config import config, IMG_FOLDER_PATH
 
 Base = declarative_base()
@@ -27,29 +28,38 @@ class Image(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     filename = Column(String, nullable=False, unique=True)
-    created = Column(DateTime, default=datetime.now)
-    modified = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    image_hash = Column(String, nullable=False, unique=True)
+    checksum = Column(String, nullable=False)
+    image_hash = Column(String, unique=True)
 
     info_json = Column(String, nullable=True)
-    tags_str = Column(CIText, nullable=True)
+    tags_str = Column(String, nullable=True)
 
     def to_json(self):
         return {
             'id': self.id,
             'filename': self.filename,
-            'hash': self.image_hash,
-            'created': self.created.isoformat(),
-            'modified': self.modified.isoformat(),
+            'modified': datetime.fromtimestamp(self.modified).isoformat(),
             'info': self.info,
             'tags': self.tags
         }
 
     @property
+    def modified(self):
+        return self.path.stat().st_atime
+
+    def update_modified(self, value=None):
+        if value:
+            mtime = time.mktime(value.timetuple())
+        else:
+            mtime = time.time()
+
+        os.utime(str(self.path), (mtime, mtime))
+
+    @property
     def url(self):
         return 'http://{}:{}/images?filename={}'.format(
-            os.getenv('HOST', 'localhost'),
-            os.getenv('PORT', '8000'),
+            config['host'],
+            config['port'],
             quote(str(self.path), safe='')
         )
 
@@ -100,7 +110,10 @@ class Image(Base):
 
         return self.tags
 
-    def remove_tags(self, tags: list):
+    def remove_tags(self, tags):
+        if isinstance(tags, str):
+            tags = [tags]
+
         if self.tags:
             self.tags_str = '\n'.join(set(self.tags) - set(tags))
 
@@ -156,7 +169,19 @@ class Image(Base):
         return cls._create(filename, tags=tags, pil_handle=im_bytes_io)
 
     @classmethod
-    def from_existing(cls, abs_path, rel_path=None, tags=None):
+    def from_existing(cls, abs_path, rel_path=None, tags=None, skip_hash=False):
+        """
+
+        :param str|Path abs_path:
+        :param str|Path rel_path:
+        :param list tags:
+        :param bool skip_hash:
+        :return:
+        """
+        if tags is None:
+            tags = list()
+
+        abs_path = Path(abs_path)
         is_relative = False
 
         if rel_path is None:
@@ -166,7 +191,10 @@ class Image(Base):
             except ValueError:
                 rel_path = Path(abs_path.name)
 
-        db_image = cls._create(filename=str(rel_path), tags=tags, pil_handle=abs_path)
+        tags.extend(complete_path_split(rel_path.parent, relative_to=None))
+
+        db_image = cls._create(filename=str(rel_path), tags=tags, pil_handle=abs_path, skip_hash=skip_hash,
+                               trim=False, shrink=False)
         if isinstance(db_image, str):
             if is_relative:
                 send2trash(str(abs_path))
@@ -174,63 +202,112 @@ class Image(Base):
         return db_image
 
     @classmethod
-    def _create(cls, filename, tags, pil_handle):
+    def _create(cls, filename, tags, pil_handle, skip_hash=False,
+                trim=True, shrink=True):
+        def _process_image():
+            try:
+                _im = PIL.Image.open(pil_handle)
+            except OSError:
+                return None
+
+            if trim:
+                _im = trim_image(_im)
+            if shrink:
+                _im = shrink_image(_im)
+
+            return _im
+
+        filename = str(filename)
         IMG_FOLDER_PATH.joinpath(filename).parent.mkdir(parents=True, exist_ok=True)
 
         true_filename = IMG_FOLDER_PATH.joinpath(filename)
         do_save = True
         if true_filename.exists():
             do_save = False
-
-        im = PIL.Image.open(pil_handle)
-        im = trim_image(im)
-        im = shrink_image(im)
-
-        h = str(imagehash.dhash(im))
+            checksum = get_checksum(true_filename)
+        else:
+            checksum = get_checksum(pil_handle)
+            if checksum is None:
+                return
 
         db_image = None
-        for pre_existing in cls.similar_images_by_hash(h):
-            if pre_existing.filename != filename:
-                pre_existing.modified = datetime.now()
-                config['session'].commit()
+        if checksum:
+            db_image = config['session'].query(cls).filter_by(checksum=checksum).first()
+            if db_image is not None:
+                if db_image.filename != filename:
+                    db_image.update_modified()
 
-                err_msg = 'Similar image exists: {}'.format(pre_existing.path)
-                # raise ValueError(err_msg)
-                logging.error(err_msg)
-                return err_msg
-            else:
-                db_image = pre_existing
-
-        if do_save:
-            im.save(true_filename)
+                    err_msg = 'Similar image exists: {}'.format(db_image.path)
+                    logging.error(err_msg)
+                    return err_msg
+                else:
+                    return db_image
 
         if db_image is None:
-            db_image = cls()
-            db_image.filename = filename
-            db_image.image_hash = h
-            config['session'].add(db_image)
-            config['session'].commit()
+            im = None
+            h = None
 
-            if tags:
-                db_image.add_tags(tags)
+            if skip_hash:
+                if trim or shrink:
+                    im = _process_image()
+            else:
+                im = _process_image()
+                if im is not None:
+                    h = get_image_hash(im)
+                    if h is None:
+                        err_msg = 'Cannot read file {}'.format(filename)
+                        logging.error(err_msg)
+                        return err_msg
+
+                    for pre_existing in cls.similar_images_by_hash(h):
+                        if pre_existing.filename != filename:
+                            pre_existing.update_modified()
+
+                            err_msg = 'Similar image exists: {}'.format(pre_existing.path)
+                            logging.error(err_msg)
+                            return err_msg
+                        else:
+                            db_image = pre_existing
+                else:
+                    err_msg = 'Cannot read file {}'.format(filename)
+                    logging.error(err_msg)
+                    return err_msg
+
+            if do_save:
+                if im:
+                    im.save(true_filename)
+                else:
+                    assert isinstance(pil_handle, (str, Path))
+                    shutil.copy(str(pil_handle), true_filename)
+
+            if db_image is None:
+                db_image = cls()
+                db_image.filename = filename
+                db_image.checksum = checksum
+                db_image.image_hash = h
+                config['session'].add(db_image)
+                config['session'].commit()
+
+                if tags:
+                    db_image.add_tags(tags)
+
+                db_image.update_modified()
 
         return db_image
 
-    def delete(self, recent_items=None):
-        if recent_items is None:
-            recent_items = dict()
+    @classmethod
+    def add(cls, fp, tags=None, **kwargs):
+        if isinstance(fp, (str, Path)):
+            return cls.from_existing(fp, tags=tags, **kwargs)
+        else:
+            return cls.from_bytes_io(fp, tags=tags, **kwargs)
 
-        for tic in self.tag_image_connects:
-            config['session'].delete(tic)
-            config['session'].commit()
-
-        config['session'].delete(self)
-        config['session'].commit()
-
+    def delete(self):
         if self.exists():
             send2trash(str(self.path))
 
-        return recent_items
+        config['session'].delete(self)
+        config['session'].commit()
 
     def exists(self):
         return self.path.exists()
@@ -245,12 +322,18 @@ class Image(Base):
 
     @classmethod
     def similar_images_by_hash(cls, h):
-        for db_image in config['session'].query(cls).all():
-            if imagehash.hex_to_hash(db_image.image_hash) - imagehash.hex_to_hash(h) < config['similarity_threshold']:
-                yield db_image
+        if config['hash_difference_threshold']:
+            for db_image in config['session'].query(cls).all():
+                if imagehash.hex_to_hash(db_image.image_hash) - imagehash.hex_to_hash(h) \
+                        < config['hash_difference_threshold']:
+                    yield db_image
+        else:
+            return iter(config['session'].query(cls).filter_by(image_hash=h))
 
     @classmethod
     def similar_images(cls, im):
-        h = str(imagehash.dhash(im))
+        h = get_image_hash(im)
+        if h is None:
+            return
 
         yield from cls.similar_images_by_hash(h)
