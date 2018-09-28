@@ -193,7 +193,7 @@ class Image(Base):
 
         tags.extend(complete_path_split(rel_path.parent, relative_to=None))
 
-        db_image = cls._create(filename=str(rel_path), tags=tags, pil_handle=abs_path, skip_hash=skip_hash,
+        db_image = cls._create(filename=str(rel_path), tags=tags, pil_handle=abs_path,
                                trim=False, shrink=False)
         if isinstance(db_image, str):
             if is_relative:
@@ -202,7 +202,7 @@ class Image(Base):
         return db_image
 
     @classmethod
-    def _create(cls, filename, tags, pil_handle, skip_hash=False,
+    def _create(cls, filename, tags, pil_handle,
                 trim=True, shrink=True):
         def _process_image():
             try:
@@ -247,7 +247,7 @@ class Image(Base):
             im = None
             h = None
 
-            if skip_hash:
+            if config['skip_hash']:
                 if trim or shrink:
                     im = _process_image()
             else:
@@ -274,11 +274,13 @@ class Image(Base):
                     return err_msg
 
             if do_save:
+                if isinstance(pil_handle, (str, Path)):
+                    shutil.copy(str(pil_handle), true_filename)
+                else:
+                    im = _process_image()
+
                 if im:
                     im.save(true_filename)
-                else:
-                    assert isinstance(pil_handle, (str, Path))
-                    shutil.copy(str(pil_handle), true_filename)
 
             if db_image is None:
                 db_image = cls()

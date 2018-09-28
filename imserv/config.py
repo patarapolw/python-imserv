@@ -8,7 +8,8 @@ config = {
     'debug': False,
     'threaded': False,
     'hash_size': 32,
-    'hash_difference_threshold': 0
+    'hash_difference_threshold': 0,
+    'skip_hash': False
 }
 
 for k in config.keys():
@@ -16,7 +17,7 @@ for k in config.keys():
     if env_k in os.environ.keys():
         v = os.environ[env_k]
 
-        if k in {'port', 'hash_size', 'hash_difference_threshold'}:
+        if k in {'port', 'hash_size', 'hash_difference_threshold', 'skip_hash'}:
             config[k] = int(v)
         elif k in {'debug', 'threaded'}:
             config[k] = bool(v)
