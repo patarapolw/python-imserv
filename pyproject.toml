@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "imserv"
-version = "0.1.6.1"
+version = "0.1.7"
 description = "Spin an image server, store images from Clipboard in single place, and prevent duplication."
 authors = ["Pacharapol Withayasakpunt <patarapolw@gmail.com>"]
 repository = 'https://github.com/patarapolw/imserv'
