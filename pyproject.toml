@@ -5,6 +5,7 @@ description = "Spin an image server, store images from Clipboard in single place
 authors = ["Pacharapol Withayasakpunt <patarapolw@gmail.com>"]
 repository = 'https://github.com/patarapolw/imserv'
 homepage = 'https://github.com/patarapolw/imserv'
+readme = 'README.md'
 
 [tool.poetry.dependencies]
 python = "*"

@@ -18,7 +18,7 @@ from sqlalchemy.orm import sessionmaker
 from . import db, app
 from .util import (open_browser_tab, images_in_path, complete_path_split, remove_non_images,
                    get_image_hash, get_checksum)
-from .config import config, IMG_FOLDER_PATH
+from .config import config
 
 
 class FileCreationHandler(FileSystemEventHandler):
@@ -44,7 +44,8 @@ class ImServ:
             'debug': False,
             'threaded': False,
             'hash_size': 32,
-            'hash_difference_threshold': 0
+            'hash_difference_threshold': 0,
+            'folder': IMG_FOLDER_PATH
         }
         """
         config.update(kwargs)
@@ -55,13 +56,25 @@ class ImServ:
         config['session'] = self.session
 
     def __iter__(self):
+        """
+        
+        Returns:
+            Iterator of all db.Image's in the database
+        """
+
         return self.search()
 
     def init(self):
+        """Initiate the database for the first time (see README.md)
+        """
+
         db.Base.metadata.create_all(self.engine)
         self.refresh()
 
     def runserver(self):
+        """Run the image server (see README.md)
+        """
+
         def _runserver():
             app.run(
                 host=config['host'],
@@ -85,6 +98,19 @@ class ImServ:
 
     def search(self, filename=None, tags=None, info=None,
                since=None, until=None):
+        """Search the image database
+        
+        Keyword Arguments:
+            filename {str} -- Substring of the filename to query (default: {None})
+            tags {iterable} -- Iterable of substrings of tags (default: {None})
+            info {str} -- Substring of the db.Image.info_json (default: {None})
+            since {datetime.datetime} -- Start datetime of db.Image.modified (default: {None})
+            until {datetime.datetime} -- End datetime of db.Image.modified (default: {None})
+        
+        Returns:
+            iterator -- Iterator of db.Image
+        """
+
         def _filter_tag(q):
             for db_image in q:
                 if any(x in tag for tag in db_image.tags):
@@ -134,10 +160,16 @@ class ImServ:
         return query
 
     def search_filename(self, filename_regex):
+        """Search filename in the config['ima'] directly (without needing to be embedded in the database.)
+        
+        Arguments:
+            filename_regex {str} -- regex matching the filename
+        """
+
         for path in images_in_path():
             if re.search(filename_regex, str(path), re.IGNORECASE):
                 db_image = self.session.query(db.Image) \
-                    .filter_by(filename=str(path.relative_to(IMG_FOLDER_PATH))).first()
+                    .filter_by(filename=str(path.relative_to(config['folder']))).first()
                 if db_image is None:
                     db_image = db.Image()
                     db_image.path = path
@@ -145,15 +177,30 @@ class ImServ:
                 yield db_image
 
     def last(self, count=1):
+        """View the latest added db.Image's
+        
+        Keyword Arguments:
+            count {int} -- Number of db.Image's to view (default: {1})
+        """
+
         for i, db_image in enumerate(self.search()):
             if i >= count:
                 break
             display(db_image)
 
     @classmethod
-    def import_images(cls, file_path=None, tags=None, skip_hash=True):
+    def import_images(cls, file_path=None, tags=None, skip_hash=False):
+        """Import images from a file path
+        
+        Keyword Arguments:
+            file_path {str, pathlib.Path} -- 
+                File/folder path to scan. By default, config['folder'] will be scanned. (default: {None})
+            tags {iterable} -- Iterable of substring of tags (default: {None})
+            skip_hash {bool} -- If duplication prevention (hashing) is slow, switch this to True (default: {True})
+        """
+
         if file_path is None:
-            file_path = IMG_FOLDER_PATH
+            file_path = config['folder']
 
         for p in tqdm(
             tuple(images_in_path(file_path)),
@@ -163,14 +210,23 @@ class ImServ:
             db.Image.from_existing(p, tags=tags, rel_path=p.relative_to(Path(file_path)),
                                    skip_hash=skip_hash)
 
-    def import_pdf(self, pdf_filename, force=False):
+    def import_pdf(self, pdf_filename):
+        """
+        Import images from a PDF. Poppler (https://poppler.freedesktop.org) will be required.
+        In Mac OSX, `brew install poppler`.
+        In Linux, `yum install poppler-utils` or `apt-get install poppler-utils`.
+        
+        Arguments:
+            pdf_filename {str, pathlib.Path} -- Path to PDF file.
+        """
+
         def _extract_pdf():
             filename_hash = hashlib.md5(pdf_filename.encode()).hexdigest()
 
             number_of_images = len(subprocess.check_output([
                 'pdfimages',
                 '-list',
-                pdf_filename
+                str(pdf_filename)
             ]).split(b'\n')) - 2
 
             observer = Observer()
@@ -186,7 +242,7 @@ class ImServ:
                     'pdfimages',
                     '-p',
                     '-png',
-                    pdf_filename,
+                    str(pdf_filename),
                     str(dst_folder_path.joinpath(filename_hash))
                 ])
             except KeyboardInterrupt:
@@ -195,17 +251,26 @@ class ImServ:
             event_handler.tqdm.close()
             observer.stop()
 
-        dst_folder_path = IMG_FOLDER_PATH.joinpath('pdf').joinpath(Path(pdf_filename).stem)
+        dst_folder_path = config['folder'].joinpath('pdf').joinpath(Path(pdf_filename).stem)
 
         if not dst_folder_path.exists():
             dst_folder_path.mkdir(parents=True)
-            _extract_pdf()
-        elif force:
             _extract_pdf()
 
         self.import_images(file_path=dst_folder_path)
 
     def get_pdf_image(self, filename_regex, page_start, page_end):
+        """Search images corresponding to PDF in config['folder']
+        
+        Arguments:
+            filename_regex {str} -- Regex matching the PDF filename
+            page_start {int} -- First page to search
+            page_end {int} -- Last page to search
+        Yields:
+            db.Image object corresponding to the criteria
+        """
+
+
         for db_image in self.search_filename(filename_regex):
             match_obj = re.search(r'(\d+)-\d+\.png', str(db_image.path), flags=re.IGNORECASE)
 
@@ -215,6 +280,13 @@ class ImServ:
                     yield db_image
 
     def refresh(self, do_delete=True):
+        """Refresh the image database.
+        
+        Keyword Arguments:
+            do_delete {bool} -- 
+                Delete the invalid files in config['folder'] if possible (by sending to trash). (default: {True})
+        """
+
         db_images_path = set()
 
         for db_image in tqdm(
@@ -240,10 +312,10 @@ class ImServ:
             desc='Adding new files in PATH',
             unit='file'
         ):
-            filename = str(file_path.relative_to(IMG_FOLDER_PATH))
+            filename = str(file_path.relative_to(config['folder']))
 
             if file_path not in db_images_path:
-                h = get_image_hash(IMG_FOLDER_PATH.joinpath(filename))
+                h = get_image_hash(config['folder'].joinpath(filename))
                 if h is None:
                     continue
 
@@ -261,6 +333,12 @@ class ImServ:
             remove_non_images()
 
     def calculate_hash(self, reset=False):
+        """Calculate hashes for images in the database
+        
+        Keyword Arguments:
+            reset {bool} -- If true, all images will be recalculated the hash (default: {False})
+        """
+
         if reset:
             for db_image in tqdm(
                 self.session.query(db.Image),

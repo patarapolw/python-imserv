@@ -18,7 +18,7 @@ from sqlalchemy import Column, Integer, String
 
 from .util import (complete_path_split, trim_image, shrink_image,
                    get_image_hash, get_checksum)
-from .config import config, IMG_FOLDER_PATH
+from .config import config
 
 Base = declarative_base()
 
@@ -70,7 +70,7 @@ class Image(Base):
         return self.to_url()
 
     def move(self, new_filename):
-        new_filename = Path(new_filename).relative_to(IMG_FOLDER_PATH)
+        new_filename = Path(new_filename).relative_to(config['folder'])
         new_filename = new_filename \
             .with_name(new_filename.name) \
             .with_suffix(self.path.suffix)
@@ -78,9 +78,9 @@ class Image(Base):
         if self.filename and self.filename != new_filename:
             new_filename = nonrepeat_filename(str(new_filename),
                                               primary_suffix='-'.join(self.tags),
-                                              root=str(IMG_FOLDER_PATH))
+                                              root=str(config['folder']))
 
-            true_filename = IMG_FOLDER_PATH.joinpath(new_filename)
+            true_filename = config['folder'].joinpath(new_filename)
             true_filename.parent.mkdir(parents=True, exist_ok=True)
 
             shutil.move(str(self.path), str(true_filename))
@@ -158,13 +158,13 @@ class Image(Base):
         if not filename or filename == 'image.png':
             filename = 'blob/' + str(uuid4())[:8] + '.png'
 
-        IMG_FOLDER_PATH.joinpath(filename).parent.mkdir(parents=True, exist_ok=True)
+        config['folder'].joinpath(filename).parent.mkdir(parents=True, exist_ok=True)
 
-        filename = str(IMG_FOLDER_PATH.joinpath(filename)
-                       .relative_to(IMG_FOLDER_PATH))
+        filename = str(config['folder'].joinpath(filename)
+                       .relative_to(config['folder']))
         filename = nonrepeat_filename(filename,
                                       primary_suffix=slugify('-'.join(tags)),
-                                      root=str(IMG_FOLDER_PATH))
+                                      root=str(config['folder']))
 
         return cls._create(filename, tags=tags, pil_handle=im_bytes_io)
 
@@ -186,7 +186,7 @@ class Image(Base):
 
         if rel_path is None:
             try:
-                rel_path = abs_path.relative_to(IMG_FOLDER_PATH)
+                rel_path = abs_path.relative_to(config['folder'])
                 is_relative = True
             except ValueError:
                 rel_path = Path(abs_path.name)
@@ -218,9 +218,9 @@ class Image(Base):
             return _im
 
         filename = str(filename)
-        IMG_FOLDER_PATH.joinpath(filename).parent.mkdir(parents=True, exist_ok=True)
+        config['folder'].joinpath(filename).parent.mkdir(parents=True, exist_ok=True)
 
-        true_filename = IMG_FOLDER_PATH.joinpath(filename)
+        true_filename = config['folder'].joinpath(filename)
         do_save = True
         if true_filename.exists():
             do_save = False
@@ -316,11 +316,11 @@ class Image(Base):
 
     @property
     def path(self):
-        return IMG_FOLDER_PATH.joinpath(self.filename)
+        return config['folder'].joinpath(self.filename)
 
     @path.setter
     def path(self, file_path):
-        self.filename = str(file_path.relative_to(IMG_FOLDER_PATH))
+        self.filename = str(file_path.relative_to(config['folder']))
 
     @classmethod
     def similar_images_by_hash(cls, h):

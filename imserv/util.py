@@ -9,7 +9,7 @@ import hashlib
 from io import BytesIO
 import logging
 
-from .config import IMG_FOLDER_PATH, config
+from .config import config
 
 
 def open_browser_tab(url):
@@ -43,7 +43,7 @@ def shrink_image(im, max_width=800):
     return im
 
 
-def remove_duplicate(file_path=IMG_FOLDER_PATH):
+def remove_duplicate(file_path=config['folder']):
     hashes = set()
 
     for p in images_in_path(file_path):
@@ -55,21 +55,21 @@ def remove_duplicate(file_path=IMG_FOLDER_PATH):
             hashes.add(h)
 
 
-def remove_non_images(file_path=IMG_FOLDER_PATH):
+def remove_non_images(file_path=config['folder']):
     images = set(images_in_path(file_path))
     for p in Path(file_path).glob('**/*.*'):
         if not p.is_dir() and p not in images:
             send2trash(str(p))
 
 
-def images_in_path(file_path=IMG_FOLDER_PATH):
+def images_in_path(file_path=config['folder']):
     for p in Path(file_path).glob('**/*.*'):
         if not p.is_dir() and not p.name.startswith('.') \
                 and p.suffix.lower() in {'.png', '.jpg', '.jp2', '.jpeg', '.gif'}:
             yield p
 
 
-def complete_path_split(path, relative_to=IMG_FOLDER_PATH):
+def complete_path_split(path, relative_to=config['folder']):
     components = []
 
     path = Path(path)

@@ -9,7 +9,8 @@ config = {
     'threaded': False,
     'hash_size': 32,
     'hash_difference_threshold': 0,
-    'skip_hash': False
+    'skip_hash': False,
+    'folder': None
 }
 
 for k in config.keys():
@@ -29,3 +30,8 @@ OS_IMG_FOLDER_PATH = Path.home().joinpath('Pictures')
 assert OS_IMG_FOLDER_PATH.exists()
 IMG_FOLDER_PATH = OS_IMG_FOLDER_PATH.joinpath('imserv')
 IMG_FOLDER_PATH.mkdir(exist_ok=True)
+
+if config['folder'] is None:
+    config['folder'] = IMG_FOLDER_PATH
+else:
+    config['folder'] = Path(config['folder'])

@@ -2,7 +2,7 @@ from flask import render_template, send_file, request
 from urllib.parse import unquote
 from pathlib import Path
 
-from .config import IMG_FOLDER_PATH
+from .config import config
 
 from . import app
 
@@ -16,7 +16,7 @@ def index():
 def get_image():
     file_path = Path(unquote(request.args.get('filename')))
     if not file_path.exists():
-        file_path = IMG_FOLDER_PATH.joinpath(file_path)
+        file_path = config['folder'].joinpath(file_path)
     print('Serving: {}'.format(file_path))
 
     return send_file(str(file_path))
