@@ -293,7 +293,7 @@ class Image(Base):
                 if tags:
                     db_image.add_tags(tags)
 
-                db_image.update_modified()
+        db_image.update_modified()
 
         return db_image
 
