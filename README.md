@@ -19,6 +19,9 @@ By default, it uses PostGRESQL of the database named `imserv`, so you have to in
 ```python
 ImServ(engine='sqlite:///PATH_TO_SQLITE_DATABASE')
 ```
+
+The image folder can also be changed in `ImServ(folder=IMG_FOLDER_PATH)`.
+
 ## Usage
 
 To run an image server (before running Jupyter Notebook), run in a script:

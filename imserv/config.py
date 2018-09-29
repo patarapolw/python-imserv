@@ -25,13 +25,11 @@ for k in config.keys():
         else:
             config[k] = v
 
-
-OS_IMG_FOLDER_PATH = Path.home().joinpath('Pictures')
-assert OS_IMG_FOLDER_PATH.exists()
-IMG_FOLDER_PATH = OS_IMG_FOLDER_PATH.joinpath('imserv')
-IMG_FOLDER_PATH.mkdir(exist_ok=True)
-
 if config['folder'] is None:
+    OS_IMG_FOLDER_PATH = Path.home().joinpath('Pictures')
+    assert OS_IMG_FOLDER_PATH.exists()
+    IMG_FOLDER_PATH = OS_IMG_FOLDER_PATH.joinpath('imserv')
+    IMG_FOLDER_PATH.mkdir(exist_ok=True)
     config['folder'] = IMG_FOLDER_PATH
 else:
     config['folder'] = Path(config['folder'])
