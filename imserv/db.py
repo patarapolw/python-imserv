@@ -147,7 +147,7 @@ class Image(BaseModel):
             image=self.get_image(400, 400),
             path=self.path,
             checksum=self.checksum,
-            image_hash=str(self.image_hash),
+            image_hash=str(self.image_hash) if self.image_hash else None,
             created=getattr(self.created, 'isoformat', lambda: None)(),
             info=self.info,
             tags=[t.name for t in self.tags]

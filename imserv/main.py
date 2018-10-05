@@ -100,6 +100,10 @@ class ImServ:
                 checksum=get_checksum(file_path),
                 image_hash=image_hash
             )
+        else:
+            if image_hash:
+                db_image.image_hash = image_hash
+                db_image.save()
 
         db_image.path = str(file_path)
 
