@@ -14,11 +14,7 @@ create_all_tables()
 ```
 The folder `~/Pictures/imserv` will be created, and will be used for storing all images. (Tested only on Mac.)
 
-By default, it uses PostGRESQL of the database named `imserv`, so you have to initialize the database first, before running the script, but you can also use SQLite by specifying:
-
-```python
-ImServ(engine='sqlite:///PATH_TO_SQLITE_DATABASE')
-```
+By default, it uses PostGRESQL of the database named `imserv`, so you have to initialize the database first, before running the script.
 
 The image folder can also be changed in `ImServ(folder=IMG_FOLDER_PATH)`.
 
