@@ -9,8 +9,8 @@ Spin an image server, store images from Clipboard in single place, and prevent d
 - Run a Python script:
 
 ```python
-from imserv import ImServ
-ImServ().init()
+from imserv.db import create_all_tables
+create_all_tables()
 ```
 The folder `~/Pictures/imserv` will be created, and will be used for storing all images. (Tested only on Mac.)
 
