@@ -1,7 +1,5 @@
-from imserv import ImServ
+from imserv.db import create_all_tables
 
 
 if __name__ == '__main__':
-    ims = ImServ()
-    ims.init()
-    ims.import_images('/Volumes/PATARAPOLW/Exam', skip_hash=True)
+    create_all_tables()

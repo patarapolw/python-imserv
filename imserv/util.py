@@ -94,11 +94,11 @@ def get_image_hash(im, trim=True, **kwargs):
     if trim:
         im = trim_image(im)
 
-    return str(imagehash.whash(
+    return imagehash.whash(
         im,
         hash_size=config['hash_size'],
         **kwargs
-    ))
+    )
 
 
 def get_checksum(fp):

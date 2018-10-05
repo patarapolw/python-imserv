@@ -2,15 +2,13 @@ import os
 from pathlib import Path
 
 config = {
-    'engine': 'postgresql://localhost/imserv',
+    'database': 'imserv',
     'host': 'localhost',
     'port': 8000,
     'debug': False,
     'threaded': False,
     'hash_size': 32,
-    'hash_difference_threshold': 0,
-    'skip_hash': False,
-    'folder': None
+    'hash_difference_threshold': 0
 }
 
 for k in config.keys():
@@ -25,7 +23,7 @@ for k in config.keys():
         else:
             config[k] = v
 
-if config['folder'] is None:
+if config.get('folder', None) is None:
     OS_IMG_FOLDER_PATH = Path.home().joinpath('Pictures')
     assert OS_IMG_FOLDER_PATH.exists()
     IMG_FOLDER_PATH = OS_IMG_FOLDER_PATH.joinpath('imserv')
@@ -33,3 +31,6 @@ if config['folder'] is None:
     config['folder'] = IMG_FOLDER_PATH
 else:
     config['folder'] = Path(config['folder'])
+
+config['blob_folder'] = config['folder'].joinpath('blob')
+config['blob_folder'].mkdir(exist_ok=True)

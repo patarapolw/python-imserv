@@ -51,31 +51,6 @@ inputBar.onpaste = ()=>{
   }
 }
 
-inputBar.addEventListener("keyup", function(event) {
-  imagePath = inputBar.value;
-
-  if (event.keyCode === 13) {
-    localStorage.setItem('tags', JSON.stringify(tags));
-
-    fetch('/api/images/rename', {
-      method: 'POST',
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-      },
-      body: JSON.stringify({
-        'filename': imagePath,
-        'tags': tags
-      })
-    }).then(response=>response.json())
-      .then(responseJson=>{
-        inputBar.value = responseJson.filename;
-        imageCanvas.src = '/images?filename=' + encodeURIComponent(responseJson.trueFilename);
-
-        alert('Renaming successful!');
-      });
-  }
-});
-
 tagsBar.addEventListener("keyup", function(event) {
   function purge(tag){
     tag = tag.trim();
