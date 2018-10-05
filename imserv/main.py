@@ -116,7 +116,7 @@ class ImServ:
         """
 
         def _extract_pdf():
-            filename_initials = ''.join(c for c in pdf_filename if c.isupper())
+            filename_initials = ''.join(c for c in str(Path(pdf_filename).name) if c.isupper())
             if not filename_initials:
                 filename_initials = pdf_filename[0]
 
