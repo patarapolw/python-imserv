@@ -1,5 +1,4 @@
 import peewee as pv
-from playhouse.postgres_ext import PostgresqlExtDatabase, JSONField
 
 import imagehash
 from uuid import uuid4
@@ -9,7 +8,7 @@ import PIL.Image
 import os
 import sys
 from datetime import datetime
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from .config import config
 from .util import get_checksum, get_image_hash
@@ -19,7 +18,7 @@ __all__ = ('Tag', 'Image', 'ImageTags', 'create_all_tables')
 
 class BaseModel(pv.Model):
     class Meta:
-        database = PostgresqlExtDatabase(config['database'])
+        database = pv.PostgresqlDatabase(config['database'])
 
 
 class ImageHashField(pv.TextField):
@@ -35,16 +34,19 @@ class ImageHashField(pv.TextField):
 class Tag(BaseModel):
     name = pv.TextField()
 
+    def to_json(self):
+        return {
+            'name': self.name,
+            'images': [img.to_json() for img in self.images]
+        }
+
 
 class Image(BaseModel):
-    file_id = pv.IntegerField(primary_key=True)
-    checksum = pv.TextField(null=True)
+    file_id = pv.IntegerField(null=True)
+    filename = pv.TextField(null=False)
+    checksum = pv.TextField(null=False)
     image_hash = ImageHashField(null=True)
-    created = pv.DateTimeField(null=True)
-    info = JSONField(null=True)
     tags = pv.ManyToManyField(Tag, backref='images')
-
-    path = None
 
     @classmethod
     def from_bytes_io(cls, im_bytes_io, filename=None, tags=None):
@@ -75,14 +77,13 @@ class Image(BaseModel):
 
         db_image = cls.create(
             file_id=os.stat(filename).st_ino,
+            filename=filename,
             checksum=checksum,
             image_hash=image_hash
         )
 
         for tag in tags:
             db_image.tags.add(Tag.get_or_create(name=tag)[0])
-
-        db_image.path = filename
 
         return db_image
 
@@ -94,10 +95,10 @@ class Image(BaseModel):
         filename = str(filename)
 
         db_image = cls.create(
-            fiel_id=os.stat(filename).st_ino,
+            file_id=os.stat(filename).st_ino,
+            filename=filename,
             checksum=get_checksum(filename),
-            image_hash=get_image_hash(filename),
-            created=datetime.now()
+            image_hash=get_image_hash(filename)
         )
 
         for tag in tags:
@@ -127,29 +128,28 @@ class Image(BaseModel):
         return self.get_image(800, 800)
 
     def _repr_json_(self):
-        result = self.to_handsontable()
-        result['image'] = self.path
+        result = self.to_json()
+        result['image'] = self.filename
 
         return result
 
     @property
     def url(self):
-        if self.path:
+        if not urlparse(self.filename).netloc:
             return 'http://{}:{}/images?filename={}'.format(
                 config['host'],
                 config['port'],
-                quote(str(self.path), safe='')
+                quote(str(self.filename), safe='')
             )
+        else:
+            return self.filename
 
-    def to_handsontable(self):
+    def to_json(self):
         return dict(
-            file_id=self.file_id,
+            id=self.id,
             image=self.get_image(400, 400),
-            path=self.path,
-            checksum=self.checksum,
-            image_hash=str(self.image_hash) if self.image_hash else None,
-            created=getattr(self.created, 'isoformat', lambda: None)(),
-            info=self.info,
+            filename=self.filename,
+            notes=[n.data for n in self.notes],
             tags=[t.name for t in self.tags]
         )
 
@@ -166,6 +166,20 @@ class Image(BaseModel):
 
 
 ImageTags = Image.tags.get_through_model()
+
+
+class Note(BaseModel):
+    image = pv.ForeignKeyField(Image, backref='notes')
+    data = pv.TextField()
+
+    def _repr_markdown_(self):
+        return self.data
+
+    def to_json(self):
+        return {
+            'file_id': self.file_.to_json(),
+            'data': self.data
+        }
 
 
 def create_all_tables():

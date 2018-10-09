@@ -4,7 +4,7 @@ from pathlib import Path
 config = {
     'database': 'imserv',
     'host': 'localhost',
-    'port': 8000,
+    'port': 29635,
     'debug': False,
     'threaded': False,
     'hash_size': 32,

@@ -21,8 +21,8 @@ def create_image():
                 return abort(make_response(jsonify(message=db_image), 409))
             else:
                 return jsonify({
-                    'filename': str(Path(db_image.path).name),
-                    'trueFilename': str(db_image.path)
+                    'filename': str(Path(db_image.filename).name),
+                    'trueFilename': str(db_image.filename)
                 }), 201
 
     response = make_response()

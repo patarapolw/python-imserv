@@ -6,6 +6,7 @@ from tqdm import tqdm
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from pathlib import Path
+import random
 
 from .config import config
 from .util import open_browser_tab, images_in_path, get_checksum, get_image_hash
@@ -25,11 +26,14 @@ class FileCreationHandler(FileSystemEventHandler):
 
 
 class ImServ:
-    def __init__(self):
+    def __init__(self, **kwargs):
+        config.update(kwargs)
+
         from . import db
 
         self.db = dict(
             image=db.Image,
+            note=db.Note,
             tag=db.Tag
         )
 
@@ -61,22 +65,18 @@ class ImServ:
         else:
             _runserver()
 
-    def search(self, filename_regex, calculate_hash=False):
+    def search_filename(self, filename_regex, calculate_hash=False):
         def _search():
             for file_path in tqdm(tuple(images_in_path())):
                 if re.search(filename_regex, str(file_path), flags=re.IGNORECASE):
                     db_image = self._get_or_create(file_path, calculate_hash)
-                    db_image.path = str(file_path)
 
                     yield db_image
 
-        def _sorter(x):
-            if x.created:
-                return -x.created.timestamp()
-            else:
-                return 0
+        return sorted(_search())
 
-        return sorted(_search(), key=_sorter)
+    def search_database(self, query):
+        return self.db['image'].select().where(query)
 
     def refresh(self, calculate_hash=False):
         for file_path in tqdm(tuple(images_in_path())):
@@ -87,6 +87,7 @@ class ImServ:
                     db_image.save()
 
     def _get_or_create(self, file_path, calculate_hash):
+        checksum = get_checksum(file_path)
         image_hash = None
         if calculate_hash:
             image_hash = get_image_hash(file_path)
@@ -97,15 +98,19 @@ class ImServ:
         if db_image is None:
             db_image = self.db['image'].create(
                 file_id=file_path.stat().st_ino,
-                checksum=get_checksum(file_path),
-                image_hash=image_hash
+                checksum=checksum,
+                image_hash=image_hash,
+                filename=str(file_path)
             )
         else:
             if image_hash:
                 db_image.image_hash = image_hash
-                db_image.save()
 
-        db_image.path = str(file_path)
+            if checksum != db_image.checksum:
+                db_image.checksum = checksum
+
+            db_image.filename = str(file_path)
+            db_image.save()
 
         return db_image
 
@@ -163,7 +168,8 @@ class ImServ:
         for file_path in tqdm(tuple(images_in_path(dst_folder_path))):
             self._get_or_create(file_path, calculate_hash=calculate_hash)
 
-    def get_pdf_image(self, filename_regex, page_start, page_end, calculate_hash=True):
+    def get_pdf_image(self, filename_regex, page_start, page_end,
+                      calculate_hash=True, randomize=False):
         """Search images corresponding to PDF in config['folder']
 
         Arguments:
@@ -174,13 +180,24 @@ class ImServ:
             db.Image object corresponding to the criteria
         """
 
-        for file_path in images_in_path():
-            match_obj = re.search(rf'{filename_regex}.*(?:[^\d])(\d+)-\d+\.png', str(file_path), flags=re.IGNORECASE)
+        def _get_image():
+            for file_path in images_in_path():
+                match_obj = re.search(rf'{filename_regex}.*(?:[^\d])(\d+)-\d+\.png', str(file_path), flags=re.IGNORECASE)
 
-            if match_obj is not None:
-                page_number = int(match_obj.group(1))
-                if page_number in range(page_start, page_end + 1):
-                    db_image = self._get_or_create(file_path, calculate_hash)
-                    db_image.path = str(file_path)
+                if match_obj is not None:
+                    page_number = int(match_obj.group(1))
+                    if page_number in range(page_start, page_end + 1):
+                        db_image = self._get_or_create(file_path, calculate_hash)
 
-                    yield db_image
+                        yield page_number, db_image
+
+        if randomize:
+            images = [db_image for i, db_image in _get_image()]
+            random.shuffle(images)
+
+            return images
+        else:
+            return [db_image for i, db_image in sorted(_get_image(), key=lambda x: x[0])]
+
+    def last_created(self):
+        return self.db['image'].select().order_by(self.db['image'].id.desc())
