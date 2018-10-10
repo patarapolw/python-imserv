@@ -67,13 +67,13 @@ class ImServ:
 
     def search_filename(self, filename_regex, calculate_hash=False):
         def _search():
-            for file_path in tqdm(tuple(images_in_path())):
+            for file_path in images_in_path():
                 if re.search(filename_regex, str(file_path), flags=re.IGNORECASE):
                     db_image = self._get_or_create(file_path, calculate_hash)
 
                     yield db_image
 
-        return sorted(_search())
+        return sorted(_search(), key=lambda x: x.filename)
 
     def search_database(self, query):
         return self.db['image'].select().where(query)

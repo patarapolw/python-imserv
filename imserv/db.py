@@ -61,10 +61,9 @@ class Image(BaseModel):
             tags = list()
 
         if not filename or filename == 'image.png':
-            filename = str(uuid4())[:8] + '.png'
+            filename = slugify('-'.join(tags)) + str(uuid4())[:8] + '.png'
 
         filename = nonrepeat_filename(filename,
-                                      primary_suffix=slugify('-'.join(tags)),
                                       root=str(config['blob_folder']))
 
         filename = str(config['blob_folder'].joinpath(filename))
