@@ -59,6 +59,8 @@ class Image(BaseModel):
 
         if tags is None:
             tags = list()
+        elif isinstance(tags, str):
+            tags = [tags]
 
         if not filename or filename == 'image.png':
             filename = slugify('-'.join(tags)) + str(uuid4())[:8] + '.png'
@@ -81,7 +83,7 @@ class Image(BaseModel):
             image_hash=image_hash
         )
 
-        for tag in tags:
+        for tag in set(tags):
             db_image.tags.add(Tag.get_or_create(name=tag)[0])
 
         return db_image
